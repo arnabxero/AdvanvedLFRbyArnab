@@ -1,0 +1,74 @@
+#include<AFMotor.h>
+#include <QTRSensors.h>
+
+
+// Line Sensor Properties
+#define NUM_SENSORS             6  // number of sensors used
+#define NUM_SAMPLES_PER_SENSOR  4  // average 4 analog samples per sensor reading
+#define EMITTER_PIN             QTR_NO_EMITTER_PIN  // emitter is controlled by digital pin 2
+
+QTRSensorsAnalog qtra((unsigned char[]) {
+  A5, A4, A3, A2, A1, A0
+}, NUM_SENSORS, NUM_SAMPLES_PER_SENSOR, EMITTER_PIN);
+unsigned int sensorValues[NUM_SENSORS];
+
+//Motor Controller pid signal pins initialized (Default to this ADAFruit Motor Shield)
+AF_DCMotor leftmotor(4);
+AF_DCMotor rightmotor(3);
+
+
+// PID Properties
+const double KP = 0.102;
+const double KD = 0.0;
+double lastError = 0;
+const int GOAL = 2500;
+const unsigned char MAX_SPEED = 255;
+
+void setup() {
+  //Sensor Calibration Function
+  calibrateLineSensor();
+
+  //Initially Setting motor speeds to max
+  leftmotor.setSpeed(MAX_SPEED);
+  rightmotor.setSpeed(MAX_SPEED);
+
+  //Freshly Configuring The Motor Driver Connections
+  leftmotor.run(RELEASE);
+  rightmotor.run(RELEASE);
+  leftmotor.run(FORWARD);
+  rightmotor.run(FORWARD);
+}
+
+void loop() {
+
+  // Get line position
+  unsigned int position = qtra.readLine(sensorValues);
+
+  // Compute error from line
+  int error = GOAL - position;
+
+  // Compute motor adjustment
+  int adjustment = KP * error + KD * (error - lastError);
+
+  // Store error for next increment
+  lastError = error;
+
+  // Adjust motors
+  leftmotor.setSpeed(constrain(MAX_SPEED - adjustment, 0, MAX_SPEED));
+  rightmotor.setSpeed(constrain(MAX_SPEED + adjustment, 0, MAX_SPEED));
+
+  //Keep Motor Running Direction Forward (Not necessary, but kept it just for safety)
+  leftmotor.run(FORWARD);
+  rightmotor.run(FORWARD);
+}
+
+void calibrateLineSensor() {
+  delay(500);
+  pinMode(13, OUTPUT);
+  digitalWrite(13, HIGH);    // turn on Arduino's LED to indicate we are in calibration mode
+  for (int i = 0; i < 3000; i++)  // make the calibration take about 10 seconds
+  {
+    qtra.calibrate();       // reads all sensors 10 times at 2.5 ms per six sensors (i.e. ~25 ms per call)
+  }
+  digitalWrite(13, LOW);     // turn off Arduino's LED to indicate we are through with calibration
+}
